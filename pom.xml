@@ -64,6 +64,9 @@
     </dependencies>
 
     <build>
+        <defaultGoal>install</defaultGoal>
+        <directory>${basedir}/target</directory>
+        <finalName>sy-back-spring</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
