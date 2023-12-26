@@ -1,0 +1,99 @@
+# This workflow will build a package using Maven and then publish it to GitHub packages when a release is created
+# For more information see: https://github.com/actions/setup-java/blob/main/docs/advanced-usage.md#apache-maven-with-a-settings-path
+
+name: Maven Package Build
+
+on:
+  push:
+    branches: main
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    permissions: write-all
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up JDK 19
+        uses: actions/setup-java@v3
+        with:
+          java-version: '19'
+          distribution: 'temurin'
+          server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
+          settings-path: ${{ github.workspace }} # location for the settings.xml file
+
+      - name: Delete Old Artifacts
+        uses: actions/github-script@v6
+        id: artifact
+        with:
+          script: |
+            const res = await github.rest.actions.listArtifactsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            })
+            
+            res.data.artifacts
+              .filter(({ name }) => name === 'package')
+              .forEach(({ id }) => {
+                github.rest.actions.deleteArtifact({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  artifact_id: id,
+                })
+              })
+      # application properties
+#      - uses: actions/checkout@v2
+#      - run: touch ./src/main/resources/application-private.properties
+#      - run: echo "${{secrets.PRIVATE_PROPERTIES}}" > ./src/main/resources/application-private.properties
+#      - uses: actions/upload-artifact@v2
+#        with:
+#          name: application.properties
+#          path: ./src/main/resources/application-private.properties
+
+      - name: Build with Maven
+        run: mvn -B package --file pom.xml
+
+      - name: Generate deployment package
+        run: |
+          mkdir -p deploy
+          cp ./target/var_team_app.jar ./deploy/application.jar
+          cp Procfile deploy/Procfile
+          cp -r .ebextensions ./deploy/.ebextensions
+          cp -r .platform ./deploy/.platform
+          cd deploy && zip -r deploy.zip .
+      - name: Upload JAR
+        uses: actions/upload-artifact@v2
+        with:
+          name: artifact
+          path: deploy/deploy.zip
+
+  deploy:
+    needs: build
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get current time
+        uses: 1466587594/get-current-time@v2
+        id: current-time
+        with:
+          format: YYYY-MM-DDTHH-mm-ss # 다른 포맷으로 변경 가능(MomentJS format syntax)
+          utcOffset: "+09:00" # 한국 시간에 맞추기 위함
+
+      - name: Download JAR
+        uses: actions/download-artifact@v2
+        with:
+          name: artifact
+      #Deploy the artifact (JAR) into AWS Beanstalk
+      - name: Deploy to EB
+        uses: einaregilsson/beanstalk-deploy@v14
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_ID }}
+          aws_secret_key: ${{ secrets.AWS_ACCESS_KEY }}
+          #aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
+          use_existing_version_if_available: false
+          application_name: sy-spring-boot-server
+          environment_name: Sy-spring-boot-server-env
+          version_label: Github Action-${{steps.current-time.outputs.formattedTime}}
+          region: ap-northeast-2
+          deployment_package: deploy.zip
