@@ -92,8 +92,8 @@ jobs:
           aws_secret_key: ${{ secrets.AWS_ACCESS_KEY }}
           #aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
           use_existing_version_if_available: false
-          application_name: sy-spring-boot-server
-          environment_name: Sy-spring-boot-server-env
+          application_name: sy-back-spring
+          environment_name: sy-back-spring
           version_label: Github Action-${{steps.current-time.outputs.formattedTime}}
           region: ap-northeast-2
           deployment_package: deploy.zip
